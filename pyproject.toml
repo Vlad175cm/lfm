@@ -1,6 +1,6 @@
 [project]
 name = "lfm"
-version = "1.0.0"
+version = "1.1.0"
 description = "Local LFM3 chat and agent in your terminal, powered by llama.cpp."
 requires-python = ">=3.11"
 dependencies = [

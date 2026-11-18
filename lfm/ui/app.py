@@ -954,21 +954,20 @@ class LfmApp(App):
 
     def cmd_system(self, arg: str = "") -> None:
         arg = arg.strip()
-        path = system_file()
         if arg.lower() == "reload":
             self.reload_system()
             return
         if arg:
             self.note(
                 f"the system prompt is not edited from the chat.\n"
-                f"edit {path}\nthen /system reload"
+                f"edit {system_file()}\nthen /system reload"
             )
             return
         head = "\n".join(self.cfg.system_prompt.splitlines()[:8])
         self.note(
             f"source: {prompt_source(self.system_path)}\n"
-            f"file: {path}\n\n{head}\n…\n\n"
-            "edit the file, then /system reload"
+            f"override: {system_file()}\n\n{head}\n…\n\n"
+            "edit the override file, then /system reload"
         )
 
     def reload_system(self) -> None:

@@ -172,23 +172,39 @@ class PromptFileTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "system.md"
-        self.env = patch.dict(os.environ, {"LFM_SYSTEM_FILE": str(self.path)})
+        self.env = patch.dict(
+            os.environ,
+            {
+                "LFM_SYSTEM_FILE": str(self.path),
+                "XDG_CONFIG_HOME": self.tmp.name,
+            },
+        )
         self.env.start()
 
     def tearDown(self):
         self.env.stop()
         self.tmp.cleanup()
 
-    def test_file_wins(self):
+    def test_local_override_wins(self):
         self.path.write_text("you are a cat", encoding="utf-8")
         self.assertEqual(load_system("fallback"), ("you are a cat", self.path))
 
-    def test_empty_file_falls_back(self):
+    def test_empty_override_uses_the_packaged_prompt(self):
         self.path.write_text("   \n\n", encoding="utf-8")
-        self.assertEqual(load_system("fallback"), ("fallback", None))
+        text, source = load_system("fallback")
+        self.assertIn("You are **lfm**", text)
+        self.assertEqual(source.name, "system.md")
+        self.assertIn("lfm", str(source))
 
-    def test_missing_file_falls_back(self):
-        self.assertEqual(load_system("fallback"), ("fallback", None))
+    def test_missing_override_uses_the_packaged_prompt(self):
+        text, source = load_system("fallback")
+        self.assertIn("You are **lfm**", text)
+        self.assertIsNotNone(source)
+
+    def test_no_prompt_anywhere_uses_the_fallback(self):
+        missing = Path(self.tmp.name) / "nope.md"
+        with patch("lfm.prompt.packaged_file", return_value=missing):
+            self.assertEqual(load_system("fallback"), ("fallback", None))
 
 
 class CodeTest(unittest.TestCase):
@@ -208,7 +224,11 @@ class AppTest(unittest.IsolatedAsyncioTestCase):
         self._old_data = os.environ.get("XDG_DATA_HOME")
         os.environ["XDG_DATA_HOME"] = self.tmp.name
         self._prompt_env = patch.dict(
-            os.environ, {"LFM_SYSTEM_FILE": str(Path(self.tmp.name) / "system.md")}
+            os.environ,
+            {
+                "LFM_SYSTEM_FILE": str(Path(self.tmp.name) / "system.md"),
+                "XDG_CONFIG_HOME": self.tmp.name,
+            },
         )
         self._prompt_env.start()
         FakeServer.answer = "Hello, world"

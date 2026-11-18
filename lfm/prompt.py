@@ -1,6 +1,8 @@
-"""The owner's own system prompt, kept in a file outside the repository.
+"""Where the system prompt comes from.
 
-Nothing in this module contains prompt text: it only finds and reads the file.
+Order: ``LFM_SYSTEM_FILE`` → ``~/.config/lfm/system.md`` → the packaged
+``lfm/system.md`` → the built-in default. The first readable, non-empty file
+wins, so a clone works out of the box and a local file overrides it.
 """
 
 from __future__ import annotations
@@ -14,23 +16,33 @@ DEFAULT_NAME = "system.md"
 
 
 def system_file() -> Path:
-    """Where the local system prompt lives (LFM_SYSTEM_FILE overrides)."""
+    """The per-user override (LFM_SYSTEM_FILE wins over the config dir)."""
     override = os.environ.get("LFM_SYSTEM_FILE")
     if override:
         return Path(override).expanduser()
     return config_home() / DEFAULT_NAME
 
 
-def load_system(fallback: str) -> tuple[str, Path | None]:
-    """Return (prompt, path). Falls back when the file is missing or empty."""
-    path = system_file()
+def packaged_file() -> Path:
+    """The prompt shipped with the package."""
+    return Path(__file__).resolve().parent / DEFAULT_NAME
+
+
+def _read(path: Path) -> str | None:
     try:
         text = path.read_text(encoding="utf-8").strip()
     except OSError:
-        return fallback, None
-    if not text:
-        return fallback, None
-    return text, path
+        return None
+    return text or None
+
+
+def load_system(fallback: str) -> tuple[str, Path | None]:
+    """Return (prompt, path) for the first source that has text."""
+    for path in (system_file(), packaged_file()):
+        text = _read(path)
+        if text is not None:
+            return text, path
+    return fallback, None
 
 
 def prompt_source(path: Path | None) -> str:

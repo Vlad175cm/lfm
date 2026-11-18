@@ -99,14 +99,17 @@ it to copy. `ctrl+y` copies the code of the last answer. Uses
 
 ## System prompt
 
-The system prompt is not stored in this repository. If
-`~/.config/lfm/system.md` exists and is not empty, its text is the assistant's
-persona — and it outranks the agent rules, which are prepended as subordinate
-instructions. `LFM_SYSTEM_FILE=/path/to/file.md` overrides the location.
+The prompt ships as `lfm/system.md` and applies out of the box. Sources are
+tried in this order:
 
-Inside `lfm`, `/system` shows the source and the first lines, and `/system
-reload` re-reads the file without restarting. The prompt is not editable from
-the chat on purpose: one file, one source of truth.
+1. `LFM_SYSTEM_FILE` if set,
+2. `~/.config/lfm/system.md` — your own override,
+3. `lfm/system.md` from the package,
+4. a short built-in default.
+
+Inside `lfm`, `/system` shows which source is active, and `/system reload`
+re-reads it without restarting. The prompt is not editable from the chat: one
+file, one source of truth.
 
 ## Manual install
 

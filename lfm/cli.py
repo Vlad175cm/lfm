@@ -17,7 +17,7 @@ from .config import (
 )
 from .setup_llama import download_model, install_llama
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -6,8 +6,3 @@ docs/plans/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# local system prompts: never commit these
-system.md
-prompts/
-*.local.md
