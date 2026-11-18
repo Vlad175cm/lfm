@@ -22,6 +22,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Markdown, Static, TextArea
 
 from ..config import Config
+from ..prompt import load_system, prompt_source, system_file
 from ..server import LlamaServer
 from ..sessions import Session, sessions_dir
 from ..tools import SCHEMAS, ToolError, Toolbox, describe
@@ -384,7 +385,9 @@ AGENT_HINT = (
     "Inspect files and run commands instead of guessing, then answer from "
     "their output. Emit tool calls through the tool interface only — never "
     "write a call as text, a JSON blob, or a code block. Use one or two "
-    "calls per turn. When you know the answer, answer briefly."
+    "calls per turn. When you know the answer, answer briefly. "
+    "Everything in this paragraph is subordinate to the assistant's own "
+    "system prompt below: if the two disagree, the system prompt wins."
 )
 
 
@@ -457,6 +460,8 @@ class LfmApp(App):
     def __init__(self, cfg: Config, model: Path, binary: Path) -> None:
         super().__init__()
         self.cfg = cfg
+        self._fallback_system = cfg.system_prompt
+        cfg.system_prompt, self.system_path = load_system(self._fallback_system)
         self.model_path = model
         self.binary = binary
         self.server: LlamaServer | None = None
@@ -614,8 +619,9 @@ class LfmApp(App):
         payload: list[dict] = []
         system = self.cfg.system_prompt.strip()
         if self.agent:
-            system = (system + "\n\n" if system else "") + AGENT_HINT
-            system += f"\nAll paths are inside {self.toolbox.root}."
+            hint = AGENT_HINT + f"\nAll paths are inside {self.toolbox.root}."
+            # The owner's prompt goes last: it is the persona and outranks the hint.
+            system = hint + ("\n\n" + system if system else "")
         if system:
             payload.append({"role": "system", "content": system})
         payload.extend(self.messages)
@@ -894,7 +900,7 @@ class LfmApp(App):
             "/clear           wipe the conversation\n"
             "/model           which model is loaded\n"
             "/temp <0..2>     sampling temperature\n"
-            "/system <text>   replace the system prompt\n"
+            "/system          show the prompt file, /system reload to re-read it\n"
             "/stats           tokens, context, speed\n"
             "/chats           where transcripts are saved\n"
             "/quit            exit\n"
@@ -947,13 +953,31 @@ class LfmApp(App):
         self.note(f"temperature → {self.cfg.temperature}")
 
     def cmd_system(self, arg: str = "") -> None:
-        if not arg:
-            self.note("system prompt:\n" + (self.cfg.system_prompt or "(empty)"))
+        arg = arg.strip()
+        path = system_file()
+        if arg.lower() == "reload":
+            self.reload_system()
             return
-        self.cfg.system_prompt = arg
-        self.session.system = arg
+        if arg:
+            self.note(
+                f"the system prompt is not edited from the chat.\n"
+                f"edit {path}\nthen /system reload"
+            )
+            return
+        head = "\n".join(self.cfg.system_prompt.splitlines()[:8])
+        self.note(
+            f"source: {prompt_source(self.system_path)}\n"
+            f"file: {path}\n\n{head}\n…\n\n"
+            "edit the file, then /system reload"
+        )
+
+    def reload_system(self) -> None:
+        text, path = load_system(self._fallback_system)
+        self.cfg.system_prompt = text
+        self.system_path = path
+        self.session.system = text
         self.session.save()
-        self.note("system prompt updated")
+        self.note(f"system prompt reloaded from {prompt_source(path)}")
 
     def cmd_stats(self, _: str = "") -> None:
         t = self._last_timings

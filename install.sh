@@ -99,3 +99,5 @@ else
 fi
 
 bold "done. run: lfm"
+note "your own system prompt (optional): ${XDG_CONFIG_HOME:-$HOME/.config}/lfm/system.md"
+note "edit it, then run /system reload inside lfm"

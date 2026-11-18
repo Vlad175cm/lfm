@@ -9,10 +9,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 from lfm.config import Config, find_model
+from lfm.prompt import load_system
 from lfm.server import LlamaServer, free_port
 from lfm.sessions import Session, sessions_dir
 from lfm.tools import ToolError, Toolbox
-from lfm.ui.app import Approval, AssistantMessage, CopyButton, LfmApp, Note, ToolStep, code_blocks
+from lfm.ui.app import (
+    AGENT_HINT,
+    Approval,
+    AssistantMessage,
+    CopyButton,
+    LfmApp,
+    Note,
+    ToolStep,
+    code_blocks,
+)
 
 
 class ConfigTest(unittest.TestCase):
@@ -158,6 +168,29 @@ class ToolboxTest(unittest.TestCase):
         self.assertFalse(self.box.dangerous("grep"))
 
 
+class PromptFileTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "system.md"
+        self.env = patch.dict(os.environ, {"LFM_SYSTEM_FILE": str(self.path)})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def test_file_wins(self):
+        self.path.write_text("you are a cat", encoding="utf-8")
+        self.assertEqual(load_system("fallback"), ("you are a cat", self.path))
+
+    def test_empty_file_falls_back(self):
+        self.path.write_text("   \n\n", encoding="utf-8")
+        self.assertEqual(load_system("fallback"), ("fallback", None))
+
+    def test_missing_file_falls_back(self):
+        self.assertEqual(load_system("fallback"), ("fallback", None))
+
+
 class CodeTest(unittest.TestCase):
     def test_extracts_fenced_blocks(self):
         text = "intro\n```python\nx = 1\n```\nmid\n```\nplain\n```\n"
@@ -174,6 +207,10 @@ class AppTest(unittest.IsolatedAsyncioTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self._old_data = os.environ.get("XDG_DATA_HOME")
         os.environ["XDG_DATA_HOME"] = self.tmp.name
+        self._prompt_env = patch.dict(
+            os.environ, {"LFM_SYSTEM_FILE": str(Path(self.tmp.name) / "system.md")}
+        )
+        self._prompt_env.start()
         FakeServer.answer = "Hello, world"
         FakeServer.script = []
         self.patcher = patch("lfm.ui.app.LlamaServer", FakeServer)
@@ -192,6 +229,7 @@ class AppTest(unittest.IsolatedAsyncioTestCase):
         self.app.exit()
         await self.ctx.__aexit__(None, None, None)
         self.patcher.stop()
+        self._prompt_env.stop()
         if self._old_data is None:
             os.environ.pop("XDG_DATA_HOME", None)
         else:
@@ -262,11 +300,33 @@ class AppTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(files), 2, files)
         self.assertNotEqual(self.app.session.path, first)
 
-    async def test_system_command(self):
+    async def test_system_command_refuses_to_edit(self):
+        before = self.app.cfg.system_prompt
         await self.send("/system you are a cat")
+        self.assertEqual(self.app.cfg.system_prompt, before)
+        notes = [str(n.render()) for n in self.app.query(".note")]
+        self.assertTrue(any("not edited from the chat" in n for n in notes), notes)
+        await self.send("hello")
+
+    async def test_system_command_shows_the_file(self):
+        await self.send("/system")
+        notes = [str(n.render()) for n in self.app.query(".note")]
+        self.assertTrue(any("system.md" in n for n in notes), notes)
+
+    async def test_system_reloads_from_the_file(self):
+        path = Path(self.tmp.name) / "system.md"
+        path.write_text("you are a cat", encoding="utf-8")
+        self.app.reload_system()
         self.assertEqual(self.app.cfg.system_prompt, "you are a cat")
         self.assertEqual(self.app.session.system, "you are a cat")
-        await self.send("hello")
+        self.assertEqual(self.app.system_path, path)
+
+    async def test_agent_hint_is_subordinate_to_the_persona(self):
+        self.app.agent = True
+        self.app.cfg.system_prompt = "you are a cat"
+        system = self.app._build_messages()[0]["content"]
+        self.assertTrue(system.startswith(AGENT_HINT))
+        self.assertTrue(system.endswith("you are a cat"))
 
     async def test_copy_button_appears_for_code(self):
         FakeServer.answer = "try this:\n```python\nx = 1\n```\n"

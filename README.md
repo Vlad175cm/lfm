@@ -95,8 +95,18 @@ it to copy. `ctrl+y` copies the code of the last answer. Uses
 ## Config
 
 `~/.config/lfm/config.toml`, created by the installer. It holds the model path,
-`ctx`, `threads`, `temperature`, `thinking`, `agent`, `agent_steps` and
-`system_prompt`.
+`ctx`, `threads`, `temperature`, `thinking`, `agent` and `agent_steps`.
+
+## System prompt
+
+The system prompt is not stored in this repository. If
+`~/.config/lfm/system.md` exists and is not empty, its text is the assistant's
+persona — and it outranks the agent rules, which are prepended as subordinate
+instructions. `LFM_SYSTEM_FILE=/path/to/file.md` overrides the location.
+
+Inside `lfm`, `/system` shows the source and the first lines, and `/system
+reload` re-reads the file without restarting. The prompt is not editable from
+the chat on purpose: one file, one source of truth.
 
 ## Manual install
 
